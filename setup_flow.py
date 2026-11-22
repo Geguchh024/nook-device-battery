@@ -1,7 +1,7 @@
 """One-time setup for a plugin that needs pip packages and downloaded files:
 a card that says what will be downloaded and how big it is, a button, and
 progress while it runs. Nothing happens until the user presses the button.
-Plugin-agnostic; copy it with deps.py and nook.py.
+Plugin-agnostic; copy it with deps.py and fenn.py.
 
     setup = setup_flow.Setup(
         app, "Set up offline background removal",
@@ -19,7 +19,7 @@ Plugin-agnostic; copy it with deps.py and nook.py.
 import threading
 
 import deps
-import nook
+import fenn
 
 
 class File:
@@ -70,17 +70,17 @@ class Setup:
 
     def card(self):
         status = self.busy or self.error or self.summary()
-        info = [nook.text(self.title, bold=True),
-                nook.text(status, size="small", color="red" if self.error else "dim",
+        info = [fenn.text(self.title, bold=True),
+                fenn.text(status, size="small", color="red" if self.error else "dim",
                           wrap=True)]
         if self.busy and self.progress is not None:
-            info.append(nook.progress(self.progress))
-        return nook.card([nook.row([
-            nook.icon("spinner" if self.busy else "download-simple", size=24,
+            info.append(fenn.progress(self.progress))
+        return fenn.card([fenn.row([
+            fenn.icon("spinner" if self.busy else "download-simple", size=24,
                       color="accent"),
-            nook.column(info, gap=3),
-            nook.spacer(),
-            nook.button(self.message, label="Working…" if self.busy else
+            fenn.column(info, gap=3),
+            fenn.spacer(),
+            fenn.button(self.message, label="Working…" if self.busy else
                         ("Try again" if self.error else "Download and set up"),
                         primary=not self.busy),
         ], gap=10, align="center")])
@@ -145,5 +145,5 @@ class Setup:
             self.missing = deps.missing(list(self.packages))
             if self.missing:
                 self.error = ("Couldn't import " + ", ".join(self.missing) +
-                              " after installing. Check nook.log.")
+                              " after installing. Check fenn.log.")
         self.on_change()

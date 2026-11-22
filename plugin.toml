@@ -1,5 +1,6 @@
 # Battery of Bluetooth earbuds/headsets, BLE devices and Xbox controllers,
 # with left, right, case and Find for Fast Pair earbuds. Under 20% turns red.
+# On Fenn's taskbar too: a segment per device, a hover card and a popup.
 id = "device-battery"
 name = "Device Battery"
 icon = "battery-medium"
@@ -7,5 +8,10 @@ size = "small"
 run = ["python", "main.py"]
 page_size = [600, 420]
 description = "Battery levels for Bluetooth earbuds and headsets, BLE devices and Xbox/XInput controllers. Fast Pair earbuds (realme, Pixel Buds and others) show each bud and the case, and can ring to be found. The tile shows the lowest one and warns below 20%."
-author = "Nook"
-version = "2.0.0"
+author = "Fenn"
+version = "2.1.0"
+
+# Beside the tray on Fenn's taskbar: each bud, the case, the mouse...
+[taskbar]
+popup_width = 300
+preview_width = 260

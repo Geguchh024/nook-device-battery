@@ -1,6 +1,6 @@
 """Installs Python packages on first use into the plugin's data folder.
 
-Nothing is installed globally: pip puts the packages in NOOK_DATA_DIR/pylib,
+Nothing is installed globally: pip puts the packages in FENN_DATA_DIR/pylib,
 which is added to sys.path. Installing only happens when the user presses
 the Install button on the page, never in the background.
 """

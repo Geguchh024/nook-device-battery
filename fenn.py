@@ -1,15 +1,15 @@
-"""Nook plugin helper for Python 3.8+. No dependencies: copy this file next
+"""Fenn plugin helper for Python 3.8+. No dependencies: copy this file next
 to your plugin's main.py.
 
-    import nook
+    import fenn
 
-    app = nook.Plugin()
+    app = fenn.Plugin()
     count = 0
 
     def draw():
-        app.tile(nook.column([
-            nook.text(str(count), size="big"),
-            nook.row([nook.button("dec", icon="minus"), nook.button("inc", icon="plus")]),
+        app.tile(fenn.column([
+            fenn.text(str(count), size="big"),
+            fenn.row([fenn.button("dec", icon="minus"), fenn.button("inc", icon="plus")]),
         ], align="center", justify="center"))
 
     @app.on("inc")
@@ -27,7 +27,13 @@ to your plugin's main.py.
     draw()
     app.run()
 
-Protocol reference: docs/plugins.html in the Nook repository.
+On the taskbar too (a [taskbar] table in plugin.toml):
+
+    app.bar([fenn.segment("82%", icon="headphones", badge="L", level=0.82)])
+    app.popup(fenn.column([...]), title="Earbuds")   # opens on a click
+    app.preview(fenn.column([...]))                   # shows on hover
+
+Protocol reference: docs/plugins.html in the Fenn repository.
 """
 
 import json
@@ -39,17 +45,18 @@ import time
 
 __all__ = [
     "Plugin", "poll_event", "emit",
-    "column", "row", "grid", "card", "spacer", "divider",
+    "column", "row", "grid", "card", "spacer", "divider", "draggable",
     "text", "icon", "image", "progress", "ring", "sparkline", "list_view", "item",
     "canvas", "button", "toggle", "slider", "text_input", "chips",
     "rect", "circle", "line", "polygon", "arc", "label", "glyph",
+    "segment", "menu_item", "level_color",
 ]
 
 PROTOCOL = 1
 
 
 def _clean(d):
-    """Drops None values so Nook's defaults apply."""
+    """Drops None values so Fenn's defaults apply."""
     return {k: v for k, v in d.items() if v is not None}
 
 
@@ -59,11 +66,12 @@ def _node(type_, tooltip=None, **fields):
 
 # Layout -------------------------------------------------------------------
 
-def column(children, gap=None, align=None, justify=None, scroll=None, tooltip=None):
+def column(children, gap=None, align=None, justify=None, scroll=None, id=None, tooltip=None):
     """Stacks children top to bottom. align: start|center|end (across);
-    justify: start|center|end (down the available height)."""
+    justify: start|center|end (down the available height). With scroll=True,
+    justify="end" keeps it scrolled to the bottom; id keys the scroll position."""
     return _node("column", tooltip, children=list(children), gap=gap, align=align,
-                 justify=justify, scroll=scroll)
+                 justify=justify, scroll=scroll, id=id)
 
 
 def row(children, gap=None, align=None, tooltip=None):
@@ -86,6 +94,16 @@ def spacer(size=None):
 
 def divider():
     return _node("divider")
+
+
+def draggable(node, paths):
+    """Makes any node drag files out of Fenn, as from Explorer: drop them in
+    Explorer, a chat, a mail. Controls inside still work. Afterwards Fenn
+    sends a "dragged" message with "paths" and "result" (copied, moved,
+    linked, cancelled or error). Older Fenn versions ignore it."""
+    node = dict(node)
+    node["drag"] = [str(p) for p in paths]
+    return node
 
 
 # Content ------------------------------------------------------------------
@@ -132,9 +150,13 @@ def list_view(items, tooltip=None):
     return _node("list", tooltip, items=list(items))
 
 
-def canvas(height, shapes, width=None, id=None, tooltip=None):
-    """Free drawing. With an id, clicks send {"x", "y"} in canvas points."""
-    return _node("canvas", tooltip, height=height, width=width, id=id, shapes=list(shapes))
+def canvas(height, shapes, width=None, id=None, keys=None, tooltip=None):
+    """Free drawing. With an id, clicks send {"x", "y"} in canvas points. With
+    keys=True too, the canvas holds the keyboard while shown and sends "key"
+    events with {"key", "repeat", "shift"}: "Up", "Space", "Enter", "Escape",
+    "A", "7" (named by position on the keyboard, so WASD works anywhere)."""
+    return _node("canvas", tooltip, height=height, width=width, id=id, keys=keys,
+                 shapes=list(shapes))
 
 
 # Controls -----------------------------------------------------------------
@@ -205,13 +227,44 @@ def glyph(x, y, name, size=None, color=None, fill=None):
                    "color": color, "fill": fill})
 
 
-# Talking to Nook ------------------------------------------------------------
+# Taskbar ----------------------------------------------------------------------
+
+def segment(text="", icon=None, badge=None, sub=None, color=None, level=None, ring=None,
+            spark=None, spark_max=None, fill=None, dim=None, id=None):
+    """One piece of a taskbar item: an icon and a short text ("82%", "21°").
+    badge: a letter on the icon's corner ("L", "R"). sub: a dim second line.
+    level: a thin bar under the text, 0..1. ring: a ring round the icon, 0..1.
+    spark: a small line chart, oldest first. color tints the icon, level and
+    ring. dim fades the segment. With an id, a click on it sends an event."""
+    return _clean({"text": str(text), "icon": icon, "badge": badge, "sub": sub,
+                   "color": color, "level": level, "ring": ring,
+                   "spark": list(spark) if spark is not None else None,
+                   "spark_max": spark_max, "fill": fill, "dim": dim, "id": id})
+
+
+def menu_item(id, label, icon=None):
+    """A row of the taskbar item's right-click menu; a pick sends a click event."""
+    return _clean({"id": id, "label": label, "icon": icon})
+
+
+def level_color(fraction, low=0.2, warn=0.35):
+    """red under `low`, orange under `warn`, else green: for battery levels."""
+    if fraction is None:
+        return None
+    if fraction < low:
+        return "red"
+    if fraction < warn:
+        return "orange"
+    return "green"
+
+
+# Talking to Fenn ------------------------------------------------------------
 
 _out_lock = threading.Lock()
 
 
 def emit(message):
-    """Writes one message to Nook."""
+    """Writes one message to Fenn."""
     line = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
     with _out_lock:
         sys.stdout.write(line + "\n")
@@ -220,7 +273,7 @@ def emit(message):
 
 def poll_event():
     """In poll mode: the event that caused this run (a dict), or None."""
-    raw = os.environ.get("NOOK_EVENT")
+    raw = os.environ.get("FENN_EVENT")
     return json.loads(raw) if raw else None
 
 
@@ -228,14 +281,19 @@ class Plugin:
     """A live-mode plugin: register handlers, then call run()."""
 
     def __init__(self):
-        self.id = os.environ.get("NOOK_PLUGIN_ID", "dev")
-        self.data_dir = os.environ.get("NOOK_DATA_DIR", os.path.join(os.getcwd(), ".data"))
+        self.id = os.environ.get("FENN_PLUGIN_ID", "dev")
+        self.data_dir = os.environ.get("FENN_DATA_DIR", os.path.join(os.getcwd(), ".data"))
         os.makedirs(self.data_dir, exist_ok=True)
-        self.dark = os.environ.get("NOOK_THEME", "dark") == "dark"
-        self.accent = os.environ.get("NOOK_ACCENT", "#7C5CFF")
+        self.dark = os.environ.get("FENN_THEME", "dark") == "dark"
+        self.accent = os.environ.get("FENN_ACCENT", "#7C5CFF")
         self.tile_size = None
         self.tile_width = self.tile_height = None
         self.page_open = False
+        # Taskbar: whether Fenn's taskbar runs, and the popup / preview is up.
+        self.taskbar = False
+        self.popup_open = False
+        self.preview_open = False
+        self._sent = {}
         self._events = {}
         self._messages = {}
         self._timers = []
@@ -253,8 +311,10 @@ class Plugin:
         return deco
 
     def on_message(self, type_):
-        """Decorator for Nook's own messages: hello, theme, layout, tile_click,
-        page_open, page_close, hotkey, files, shutdown."""
+        """Decorator for Fenn's own messages: hello, theme, layout, tile_click,
+        page_open, page_close, hotkey, files, dragged, shutdown, and for the
+        taskbar: taskbar, bar_click, bar_scroll, popup_open, popup_close,
+        preview_open, preview_close."""
         def deco(fn):
             self._messages.setdefault(type_, []).append(fn)
             return fn
@@ -266,6 +326,14 @@ class Plugin:
             self._timers.append([time.monotonic() + seconds, seconds, f])
             return f
         return deco(fn) if fn else deco
+
+    def retime(self, fn, seconds, now=False):
+        """Changes how often an `every` timer runs (faster while the popup is
+        open, slower while nobody looks). now=True runs it at once."""
+        for t in self._timers:
+            if t[2] is fn:
+                t[1] = seconds
+                t[0] = time.monotonic() + (0 if now else seconds)
 
     # Sending
 
@@ -311,6 +379,48 @@ class Plugin:
     def log(self, message, level="info"):
         emit({"type": "log", "level": level, "message": str(message)})
 
+    # Taskbar. Each sends only when it changed, so calling them on every
+    # tick costs nothing.
+
+    def _once(self, key, message):
+        line = json.dumps(message, sort_keys=True, ensure_ascii=False)
+        if self._sent.get(key) != line:
+            self._sent[key] = line
+            emit(message)
+
+    def bar(self, segments=None, view=None, width=None, tooltip=None, menu=None):
+        """The plugin's item on the taskbar: segment()s, or a view of its own
+        `width` points wide. Nothing to show takes it off the bar. menu: a list
+        of menu_item()s for its right-click menu."""
+        self._once("bar", _clean({"type": "bar", "segments": list(segments or []),
+                                  "view": view, "width": width, "tooltip": tooltip,
+                                  "menu": menu}))
+
+    def clear_bar(self):
+        self.bar([])
+
+    def popup(self, view, title=None, actions=None):
+        """The panel a click on the bar item opens. title adds a header row
+        with the plugin's icon; actions are round buttons in it."""
+        self._once("popup", _clean({"type": "popup", "view": view, "title": title,
+                                    "actions": actions}))
+
+    def clear_popup(self):
+        self._once("popup", {"type": "popup", "view": None})
+
+    def preview(self, view):
+        """The card shown while the pointer rests on the bar item."""
+        self._once("preview", {"type": "preview", "view": view})
+
+    def clear_preview(self):
+        self._once("preview", {"type": "preview", "view": None})
+
+    def open_popup(self):
+        emit({"type": "open_popup"})
+
+    def close_popup(self):
+        emit({"type": "close_popup"})
+
     # Storage in the plugin's data folder
 
     def load(self, name, default=None):
@@ -339,6 +449,11 @@ class Plugin:
                     pass
         self._inbox.put({"type": "shutdown"})
 
+    def post(self, message):
+        """Hands a message to the loop from any thread (a download that
+        finished): on_message(message["type"]) handlers get it there."""
+        self._inbox.put(message)
+
     def stop(self):
         self._running = False
 
@@ -348,6 +463,13 @@ class Plugin:
             theme = msg.get("theme", {})
             self.dark = theme.get("dark", self.dark)
             self.accent = theme.get("accent", self.accent)
+            self.taskbar = bool(msg.get("taskbar", False))
+        elif t == "taskbar":
+            self.taskbar = bool(msg.get("on"))
+        elif t in ("popup_open", "popup_close"):
+            self.popup_open = t == "popup_open"
+        elif t in ("preview_open", "preview_close"):
+            self.preview_open = t == "preview_open"
         elif t == "theme":
             self.dark = msg.get("dark", self.dark)
             self.accent = msg.get("accent", self.accent)
@@ -368,7 +490,7 @@ class Plugin:
             self._running = False
 
     def run(self):
-        """Handles messages and timers until Nook says goodbye."""
+        """Handles messages and timers until Fenn says goodbye."""
         threading.Thread(target=self._read, daemon=True).start()
         while self._running:
             timeout = None
@@ -386,7 +508,7 @@ class Plugin:
                     if now >= t[0]:
                         t[0] = now + t[1]
                         t[2]()
-            except Exception as e:  # keep the plugin alive; show the error in Nook's log
+            except Exception as e:  # keep the plugin alive; show the error in Fenn's log
                 import traceback
                 traceback.print_exc()
                 self.log(f"{type(e).__name__}: {e}", "error")
