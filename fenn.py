@@ -27,7 +27,7 @@ to your plugin's main.py.
     draw()
     app.run()
 
-On the taskbar too (a [taskbar] table in plugin.toml):
+On the taskbar too (a [taskbar] table in plugin.toml, or a taskbar.toml beside it):
 
     app.bar([fenn.segment("82%", icon="headphones", badge="L", level=0.82)])
     app.popup(fenn.column([...]), title="Earbuds")   # opens on a click

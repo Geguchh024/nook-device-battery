@@ -1,0 +1,5 @@
+# Fenn's taskbar item. Kept out of plugin.toml so Fenn 0.5, which doesn't
+# know [taskbar], still installs this plugin (as a notch tile).
+# Beside the tray on Fenn's taskbar: each bud, the case, the mouse...
+popup_width = 300
+preview_width = 260
