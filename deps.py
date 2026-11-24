@@ -1,8 +1,11 @@
 """Installs Python packages on first use into the plugin's data folder.
 
 Nothing is installed globally: pip puts the packages in FENN_DATA_DIR/pylib,
-which is added to sys.path. Installing only happens when the user presses
-the Install button on the page, never in the background.
+which goes first on sys.path, so the plugin's own copies win over older ones
+the user may have in their global Python (a half set of an older `winrt` from
+some other tool would otherwise shadow ours and fail to import). Installing
+only happens when the user presses the Install button on the page, never in
+the background.
 """
 
 import importlib
@@ -18,11 +21,28 @@ def lib_dir(data_dir):
     return os.path.join(data_dir, "pylib")
 
 
+def _put_first(lib):
+    if lib in sys.path:
+        sys.path.remove(lib)
+    sys.path.insert(0, lib)
+    importlib.invalidate_caches()
+
+
 def setup(data_dir):
     """Makes packages installed earlier importable. Call before importing them."""
     lib = lib_dir(data_dir)
-    if os.path.isdir(lib) and lib not in sys.path:
-        sys.path.append(lib)
+    if os.path.isdir(lib):
+        _put_first(lib)
+
+
+def forget(modules):
+    """Drops the top-level packages of `modules` from sys.modules, so the next
+    import finds them again (in pylib, after an install) instead of reusing
+    a copy loaded earlier from somewhere else."""
+    tops = {m.split(".")[0] for m in modules}
+    for name in list(sys.modules):
+        if name.split(".")[0] in tops:
+            del sys.modules[name]
 
 
 def missing(modules):
@@ -32,7 +52,11 @@ def missing(modules):
     for m in modules:
         try:
             importlib.import_module(m)
-        except Exception:
+        except Exception as e:
+            # Not the "No module named" text: Fenn reads that on stderr as a
+            # package to offer to install.
+            why = "not found" if isinstance(e, ModuleNotFoundError) else f"{type(e).__name__}: {e}"
+            print(f"deps: can't import {m} ({why})", file=sys.stderr)
             out.append(m)
     return out
 
@@ -56,9 +80,7 @@ def install(data_dir, packages, on_done, no_deps=False):
             msg = "Installed" if ok else tail[0][:200]
         except Exception as e:  # pip missing, timeout...
             ok, msg = False, f"{type(e).__name__}: {e}"
-        if lib not in sys.path:
-            sys.path.append(lib)
-        importlib.invalidate_caches()
+        _put_first(lib)
         on_done(ok, msg)
 
     threading.Thread(target=work, daemon=True).start()

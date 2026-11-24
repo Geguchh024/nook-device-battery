@@ -56,7 +56,7 @@ class Setup:
         return [f for f in self.files if not f.present()]
 
     def _packages_mb(self):
-        return round(sum(self.packages[m][1] for m in self.missing))
+        return round(sum(p[1] for p in self.packages.values())) if self.missing else 0
 
     def summary(self):
         parts = []
@@ -100,7 +100,10 @@ class Setup:
 
     def start(self):
         self.error = ""
-        pip_names = [self.packages[m][0] for m in self.missing]
+        # All of them, not just the missing ones: the ones that do import may
+        # come from an older copy in the global Python that the rest can't
+        # load with, and pylib goes first on sys.path, so a full set there wins.
+        pip_names = [p[0] for p in self.packages.values()] if self.missing else []
         if pip_names:
             self.busy = (f"Installing {self.packages_label or ', '.join(pip_names)} "
                          f"(about {self._packages_mb()} MB)…")
@@ -142,6 +145,7 @@ class Setup:
             self.busy, self.progress, self.error = None, None, m["error"]
         elif m.get("done"):
             self.busy, self.progress = None, None
+            deps.forget(list(self.packages))   # drop copies loaded from elsewhere
             self.missing = deps.missing(list(self.packages))
             if self.missing:
                 self.error = ("Couldn't import " + ", ".join(self.missing) +
